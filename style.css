@@ -1,0 +1,17 @@
+    /* ---- মোবাইল রেসপনসিভ ---- */
+    html, body { height:100dvh; }          /* অ্যাড্রেস বার হিসাবে নিয়ে উচ্চতা */
+    @supports not (height:100dvh) { html, body { height:100%; } }
+
+    @media (max-width: 600px) {
+      header { padding:10px 14px; }
+      h1 { font-size:24px; }
+      .sub { font-size:12px; }
+      .count { font-size:38px; }
+      .count small { font-size:16px; }
+      footer { padding:8px 14px 12px; }
+      .foot { flex-direction:column; align-items:stretch; gap:8px; font-size:13px; }
+      .foot > span { display:flex; gap:8px; }
+      .foot button { flex:1; padding:8px 6px; }   /* আঙুলে চাপার মতো বড় বাটন */
+      .lbl { font-size:10px; }
+      #fallback { width:80%; }
+    }

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <title>আমার বাংলাদেশ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#f5f1e8; --dark:#0f5c3f; --beige:#e3dccb; }
+    html, body { height:100%; margin:0; background:var(--bg); font-family:'Hind Siliguri',sans-serif; }
+    body { display:flex; flex-direction:column; }
+    header { display:flex; justify-content:space-between; align-items:center; padding:14px 22px; }
+    .sub { color:#777; font-size:14px; }
+    h1 { margin:0; font-size:34px; color:#111; }
+    .count { color:var(--dark); font-size:56px; font-weight:700; line-height:1; }
+    .count small { font-size:22px; color:#777; }
+    #map { flex:1; background:var(--bg); }
+    .leaflet-container { background:var(--bg); }
+    footer { padding:12px 22px 16px; }
+    .bar { height:10px; background:var(--beige); border-radius:6px; overflow:hidden; }
+    #fill { height:100%; width:0; background:var(--dark); transition:width .4s; }
+    .foot { display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:14px; gap:8px; flex-wrap:wrap; }
+    button { border:1px solid #bbb; background:#fff; border-radius:6px; padding:5px 12px; cursor:pointer; font-family:inherit; font-size:14px; }
+    #dl { background:var(--dark); color:#fff; border-color:var(--dark); font-weight:600; }
+    .lbl { background:transparent; border:none; box-shadow:none; font-weight:700; font-size:12px;
+           color:#111; text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff; }
+    .lbl::before { display:none; }
+    #fallback { display:none; position:absolute; z-index:1000; top:50%; left:50%; transform:translate(-50%,-50%);
+                background:#fff; padding:18px 22px; border-radius:10px; box-shadow:0 4px 20px #0003; text-align:center; max-width:320px; }
+    #loading { position:absolute; z-index:1000; top:50%; left:50%; transform:translate(-50%,-50%); color:#777; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="sub">বাংলাদেশ ভ্রমণ ম্যাপ</div>
+      <h1>আমার বাংলাদেশ</h1>
+    </div>
+    <div class="count"><span id="n">০</span><small> /<span id="total">৬৪</span></small></div>
+  </header>
+
+  <div id="map"></div>
+  <div id="loading">ম্যাপ লোড হচ্ছে...</div>
+
+  <div id="fallback">
+    <p>অনলাইন থেকে জেলার ডেটা আনা যায়নি।<br>নিজে একটি জেলার GeoJSON ফাইল দিন:</p>
+    <input type="file" id="file" accept=".geojson,.json">
+  </div>
+
+  <footer>
+    <div class="bar"><div id="fill"></div></div>
+    <div class="foot">
+      <b><span id="pct">০</span>% বাংলাদেশ ঘোরা হয়েছে</b>
+      <span>
+        <button id="reset">রিসেট</button>
+        <button id="dl">⬇ ছবি ডাউনলোড (PNG)</button>
+      </span>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const BN = {
+      dhaka:'ঢাকা', gazipur:'গাজীপুর', narayanganj:'নারায়ণগঞ্জ', narsingdi:'নরসিংদী',
+      munshiganj:'মুন্সিগঞ্জ', manikganj:'মানিকগঞ্জ', tangail:'টাঙ্গাইল', kishoreganj:'কিশোরগঞ্জ', kishorganj:'কিশোরগঞ্জ',
+      faridpur:'ফরিদপুর', gopalganj:'গোপালগঞ্জ', madaripur:'মাদারীপুর', rajbari:'রাজবাড়ী', shariatpur:'শরীয়তপুর',
+      mymensingh:'ময়মনসিংহ', jamalpur:'জামালপুর', netrokona:'নেত্রকোনা', netrakona:'নেত্রকোনা', sherpur:'শেরপুর',
+      chittagong:'চট্টগ্রাম', chattogram:'চট্টগ্রাম', coxsbazar:'কক্সবাজার', coxbazar:'কক্সবাজার',
+      comilla:'কুমিল্লা', cumilla:'কুমিল্লা', brahmanbaria:'ব্রাহ্মণবাড়িয়া', chandpur:'চাঁদপুর',
+      lakshmipur:'লক্ষ্মীপুর', laxmipur:'লক্ষ্মীপুর', noakhali:'নোয়াখালী', feni:'ফেনী',
+      khagrachari:'খাগড়াছড়ি', khagrachhari:'খাগড়াছড়ি', rangamati:'রাঙ্গামাটি', bandarban:'বান্দরবান',
+      sylhet:'সিলেট', moulvibazar:'মৌলভীবাজার', maulvibazar:'মৌলভীবাজার', habiganj:'হবিগঞ্জ', sunamganj:'সুনামগঞ্জ',
+      rajshahi:'রাজশাহী', natore:'নাটোর', naogaon:'নওগাঁ', chapainawabganj:'চাঁপাইনবাবগঞ্জ', nawabganj:'চাঁপাইনবাবগঞ্জ',
+      pabna:'পাবনা', sirajganj:'সিরাজগঞ্জ', bogra:'বগুড়া', bogura:'বগুড়া', joypurhat:'জয়পুরহাট', jaipurhat:'জয়পুরহাট',
+      rangpur:'রংপুর', dinajpur:'দিনাজপুর', gaibandha:'গাইবান্ধা', kurigram:'কুড়িগ্রাম', lalmonirhat:'লালমনিরহাট',
+      nilphamari:'নীলফামারী', panchagarh:'পঞ্চগড়', panchagar:'পঞ্চগড়', thakurgaon:'ঠাকুরগাঁও',
+      khulna:'খুলনা', bagerhat:'বাগেরহাট', satkhira:'সাতক্ষীরা', jessore:'যশোর', jashore:'যশোর',
+      jhenaidah:'ঝিনাইদহ', jhenaidaha:'ঝিনাইদহ', magura:'মাগুরা', narail:'নড়াইল', kushtia:'কুষ্টিয়া',
+      chuadanga:'চুয়াডাঙ্গা', meherpur:'মেহেরপুর',
+      barisal:'বরিশাল', barishal:'বরিশাল', bhola:'ভোলা', patuakhali:'পটুয়াখালী', barguna:'বরগুনা',
+      jhalokati:'ঝালকাঠি', jhalakati:'ঝালকাঠি', jhalokathi:'ঝালকাঠি', jhalakathi:'ঝালকাঠি', pirojpur:'পিরোজপুর'
+    };
+    const key = s => String(s).toLowerCase().replace(/[^a-z]/g, '');
+    const toBn = n => String(n).replace(/\d/g, d => '০১২৩৪৫৬৭৮৯'[d]);
+
+    function nameOf(p) {
+      const k = ['name','NAME','NAME_2','shapeName','adm2_en','ADM2_EN','district','DISTRICT','dist_name','District','name_en']
+        .find(x => typeof p[x] === 'string' && p[x]);
+      if (k) return p[k];
+      return Object.values(p).find(v => typeof v === 'string' && /[A-Za-z]/.test(v)) || 'Unknown';
+    }
+    function bnOf(p, name) {
+      const k = ['bn_name','name_bn','bnName','NAME_BN','adm2_bn','ADM2_BN','bangla'].find(x => typeof p[x] === 'string' && p[x]);
+      return k ? p[k] : (BN[key(name)] || name);
+    }
+
+    // রং
+    const GREEN = '#1a8a62', GREEN_BORDER = '#0f5c3f';
+    const LIGHT_RED = '#f6c4be', LIGHT_RED_BORDER = '#ffffff';
+
+    const STORE = 'bd-visited';
+    let visited = new Set();
+    try { visited = new Set(JSON.parse(localStorage.getItem(STORE) || '[]')); } catch (e) {}
+    const save = () => { try { localStorage.setItem(STORE, JSON.stringify([...visited])); } catch (e) {} };
+
+    const bdBounds = [[20.5, 88.0], [26.7, 92.7]];
+    const map = L.map('map', { maxBounds: [[19.5, 87.0], [27.7, 93.7]], maxBoundsViscosity: 1.0, zoomSnap: 0.25 });
+    map.attributionControl.setPrefix('');
+    map.fitBounds(bdBounds);
+    map.setMinZoom(map.getZoom() - 0.5);
+
+    const urls = [
+      'https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/geojson/districts.geojson',
+      'https://cdn.jsdelivr.net/gh/nuhil/bangladesh-geocode@master/geojson/districts.geojson',
+      'https://rawcdn.githack.com/nuhil/bangladesh-geocode/master/geojson/districts.geojson'
+    ];
+    async function loadData() {
+      for (const u of urls) {
+        try {
+          const r = await fetch(u);
+          if (r.ok) { const d = await r.json(); if (d.features) return d; }
+        } catch (e) { console.warn('লোড হয়নি:', u, e); }
+      }
+      throw new Error('no data');
+    }
+
+    const styleOf = on => ({
+      fillColor: on ? GREEN : LIGHT_RED, fillOpacity: 1,
+      color: on ? GREEN_BORDER : LIGHT_RED_BORDER, weight: 1.2
+    });
+
+    let total = 0;
+    function updateUI() {
+      const n = visited.size;
+      const pct = total ? Math.round(n / total * 100) : 0;
+      document.getElementById('n').textContent = toBn(n);
+      document.getElementById('total').textContent = toBn(total);
+      document.getElementById('pct').textContent = toBn(pct);
+      document.getElementById('fill').style.width = pct + '%';
+    }
+
+    const layers = [];
+    const items = [];   // ডাউনলোডের জন্য: {geom, name, label, center}
+    function init(data) {
+      document.getElementById('fallback').style.display = 'none';
+      document.getElementById('loading').style.display = 'none';
+      total = data.features.length;
+
+      const geo = L.geoJSON(data, {
+        style: f => styleOf(visited.has(nameOf(f.properties))),
+        onEachFeature: (f, layer) => {
+          const name = nameOf(f.properties);
+          const label = bnOf(f.properties, name);
+          items.push({ geom: f.geometry, name, label, center: layer.getBounds().getCenter() });
+
+          const refresh = () => {
+            const on = visited.has(name);
+            layer.setStyle(styleOf(on));
+            layer.unbindTooltip();
+            layer.bindTooltip(label, { permanent: on, direction: 'center', className: 'lbl', sticky: !on });
+            if (layer._dot) { map.removeLayer(layer._dot); layer._dot = null; }
+            if (on) {
+              layer._dot = L.circleMarker(layer.getBounds().getCenter(), {
+                radius: 3, color: '#fff', weight: 1, fillColor: '#e0245e', fillOpacity: 1, interactive: false
+              }).addTo(map);
+            }
+          };
+          layer._refresh = refresh;
+          layers.push(layer);
+          refresh();
+
+          layer.on('click', () => { visited.has(name) ? visited.delete(name) : visited.add(name); save(); refresh(); updateUI(); });
+          layer.on('mouseover', () => layer.setStyle({ weight: 2.5, color: '#000' }));
+          layer.on('mouseout', () => layer.setStyle(styleOf(visited.has(name))));
+        }
+      }).addTo(map);
+
+      map.fitBounds(geo.getBounds());
+      updateUI();
+    }
+
+    document.getElementById('reset').onclick = () => {
+      if (!confirm('সব চিহ্ন মুছে ফেলবেন?')) return;
+      visited.clear(); save();
+      layers.forEach(l => l._refresh());
+      updateUI();
+    };
+
+    // ---------- PNG ডাউনলোড ----------
+    function polysOf(g) {
+      if (g.type === 'Polygon') return [g.coordinates];
+      if (g.type === 'MultiPolygon') return g.coordinates;
+      return [];
+    }
+
+    async function downloadPNG() {
+      if (!items.length) return alert('ম্যাপ এখনো লোড হয়নি');
+      try { await document.fonts.load('700 40px "Hind Siliguri"'); await document.fonts.load('400 20px "Hind Siliguri"'); } catch (e) {}
+
+      const W = 1080, H = 1350, F = '"Hind Siliguri", sans-serif';
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const c = cv.getContext('2d');
+
+      c.fillStyle = '#f5f1e8'; c.fillRect(0, 0, W, H);
+
+      // হেডার
+      c.textBaseline = 'alphabetic';
+      c.fillStyle = '#777'; c.font = `400 28px ${F}`; c.textAlign = 'left';
+      c.fillText('বাংলাদেশ ভ্রমণ ম্যাপ', 70, 90);
+      c.fillStyle = '#111'; c.font = `700 72px ${F}`;
+      c.fillText('আমার বাংলাদেশ', 70, 170);
+
+      const n = visited.size, pct = Math.round(n / total * 100);
+      c.textAlign = 'right';
+      c.fillStyle = '#777'; c.font = `700 40px ${F}`;
+      c.fillText('/' + toBn(total), W - 70, 170);
+      const wTotal = c.measureText('/' + toBn(total)).width;
+      c.fillStyle = '#0f5c3f'; c.font = `700 120px ${F}`;
+      c.fillText(toBn(n), W - 70 - wTotal - 8, 170);
+
+      // ম্যাপের মাপ নির্ধারণ
+      let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+      items.forEach(it => polysOf(it.geom).forEach(poly => poly.forEach(ring => ring.forEach(([x, y]) => {
+        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }))));
+      const kx = Math.cos(23.7 * Math.PI / 180);
+      const areaX = 80, areaY = 230, areaW = W - 160, areaH = 940;
+      const s = Math.min(areaW / ((maxX - minX) * kx), areaH / (maxY - minY));
+      const offX = areaX + (areaW - (maxX - minX) * kx * s) / 2;
+      const offY = areaY + (areaH - (maxY - minY) * s) / 2;
+      const px = x => offX + (x - minX) * kx * s;
+      const py = y => offY + (maxY - y) * s;
+
+      // জেলা আঁকা
+      c.lineJoin = 'round';
+      items.forEach(it => {
+        const on = visited.has(it.name);
+        c.beginPath();
+        polysOf(it.geom).forEach(poly => poly.forEach(ring => {
+          ring.forEach(([x, y], i) => i ? c.lineTo(px(x), py(y)) : c.moveTo(px(x), py(y)));
+          c.closePath();
+        }));
+        c.fillStyle = on ? GREEN : LIGHT_RED; c.fill();
+        c.strokeStyle = on ? GREEN_BORDER : '#ffffff'; c.lineWidth = on ? 1.5 : 1.2; c.stroke();
+      });
+
+      // নাম ও ডট (নির্বাচিতদের)
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      items.forEach(it => {
+        if (!visited.has(it.name)) return;
+        const x = px(it.center.lng), y = py(it.center.lat);
+        c.font = `700 22px ${F}`;
+        c.lineWidth = 5; c.strokeStyle = 'rgba(255,255,255,.95)'; c.strokeText(it.label, x, y - 14);
+        c.fillStyle = '#111'; c.fillText(it.label, x, y - 14);
+        c.beginPath(); c.arc(x, y + 6, 5, 0, 7);
+        c.fillStyle = '#e0245e'; c.fill();
+        c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke();
+      });
+
+      // প্রগ্রেস বার
+      const bx = 70, bw = W - 140, by = 1245;
+      c.fillStyle = '#e3dccb'; c.beginPath(); c.roundRect(bx, by, bw, 12, 6); c.fill();
+      if (pct > 0) { c.fillStyle = '#0f5c3f'; c.beginPath(); c.roundRect(bx, by, Math.max(12, bw * pct / 100), 12, 6); c.fill(); }
+      c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+      c.fillStyle = '#111'; c.font = `700 28px ${F}`;
+      c.fillText(`${toBn(pct)}% বাংলাদেশ ঘোরা হয়েছে`, bx, 1305);
+      c.textAlign = 'right'; c.fillStyle = '#777'; c.font = `400 24px ${F}`;
+      c.fillText(`${toBn(n)}টি জেলা ঘোরা হয়েছে`, bx + bw, 1305);
+
+      const a = document.createElement('a');
+      a.download = 'amar-bangladesh.png';
+      a.href = cv.toDataURL('image/png');
+      a.click();
+    }
+    document.getElementById('dl').onclick = downloadPNG;
+
+    // ফাইল দিয়ে লোড (ফলব্যাক)
+    document.getElementById('file').onchange = e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => { try { init(JSON.parse(reader.result)); } catch (err) { alert('ফাইলটি সঠিক GeoJSON নয়'); } };
+      reader.readAsText(f);
+    };
+
+    loadData().then(init).catch(() => {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('fallback').style.display = 'block';
+    });
+  </script>
+</body>
+</html>
